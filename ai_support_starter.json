@@ -1,0 +1,171 @@
+{
+  "name": "💚 AI Customer Support - Starter",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "trigger_email",
+      "name": "Email Trigger",
+      "type": "n8n-nodes-base.emailTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "notes": "Receives support requests via Email only\nIdeal for: Small teams, simple queries"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "extract_basic",
+              "name": "customer_data",
+              "value": "={{$json.from}}, {{$json.subject}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "prepare_context",
+      "name": "Prepare Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [450, 300],
+      "notes": "Basic context extraction:\n- Customer email\n- Subject line\n- Message body"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "systemMessage": "You are a helpful customer support assistant.\n\nYour job:\n1. Understand the customer's issue\n2. Search the knowledge base for solutions\n3. Provide clear, step-by-step answers\n\nTone: Friendly and professional\nResponse: Keep it concise and actionable\n\nIf you can't solve the issue, politely inform the customer to contact support@company.com for further assistance."
+        }
+      },
+      "id": "ai_agent_basic",
+      "name": "🤖 AI Agent (GPT-4o-mini)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [650, 300],
+      "notes": "💰 Cost-optimized with GPT-4o-mini:\n- $0.00015 / 1K input tokens\n- $0.0006 / 1K output tokens\n- ~5x cheaper than GPT-4o"
+    },
+    {
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "options": {}
+      },
+      "id": "embeddings_model",
+      "name": "Text Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1,
+      "position": [650, 450],
+      "notes": "text-embedding-3-small\n$0.00002 / 1K tokens"
+    },
+    {
+      "parameters": {
+        "qdrantCollection": "starter_kb",
+        "options": {
+          "topK": 3
+        }
+      },
+      "id": "vector_store_simple",
+      "name": "📚 Knowledge Base",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1,
+      "position": [650, 600],
+      "notes": "Simple knowledge base:\n- FAQ documents\n- Basic product info\n- Common solutions\nTop 3 results only"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "to": "={{$json.customer_email}}",
+        "subject": "Re: {{$json.subject}}",
+        "message": "={{$json.ai_response}}",
+        "options": {}
+      },
+      "id": "send_response",
+      "name": "📧 Send Response",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "notes": "Auto-send email response\nNo human review in Starter"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "log_basic",
+              "name": "interaction_log",
+              "value": "={\n  \"timestamp\": \"{{$now.toISO()}}\",\n  \"customer_email\": \"{{$json.customer_email}}\",\n  \"query\": \"{{$json.query}}\",\n  \"ai_response\": \"{{$json.ai_response}}\",\n  \"tokens_used\": {{$json.total_tokens}},\n  \"cost\": \"${{$json.estimated_cost}}\"\n}",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "id": "log_interaction",
+      "name": "📊 Basic Logging",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1050, 300],
+      "notes": "Simple logging:\n✅ Timestamp\n✅ Customer info\n✅ Query & response\n✅ Cost tracking"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{$json.sheet_id}}",
+        "sheetName": "Starter Metrics",
+        "columns": {
+          "mappings": [
+            {
+              "column": "Timestamp",
+              "value": "={{$now.toISO()}}"
+            },
+            {
+              "column": "Customer",
+              "value": "={{$json.customer_email}}"
+            },
+            {
+              "column": "Tokens",
+              "value": "={{$json.total_tokens}}"
+            },
+            {
+              "column": "Cost",
+              "value": "={{$json.estimated_cost}}"
+            }
+          ]
+        }
+      },
+      "id": "update_sheet",
+      "name": "📈 Log to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.2,
+      "position": [1250, 300],
+      "notes": "Simple Google Sheet logging:\n- Daily tracking\n- Cost monitoring\n- Basic analytics"
+    }
+  ],
+  "connections": {
+    "Email Trigger": {
+      "main": [[{"node": "Prepare Context", "type": "main", "index": 0}]]
+    },
+    "Prepare Context": {
+      "main": [[{"node": "🤖 AI Agent (GPT-4o-mini)", "type": "main", "index": 0}]]
+    },
+    "🤖 AI Agent (GPT-4o-mini)": {
+      "main": [[{"node": "📧 Send Response", "type": "main", "index": 0}]]
+    },
+    "📧 Send Response": {
+      "main": [[{"node": "📊 Basic Logging", "type": "main", "index": 0}]]
+    },
+    "📊 Basic Logging": {
+      "main": [[{"node": "📈 Log to Sheet", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {"id": "starter", "name": "Starter"},
+    {"id": "ai-agent", "name": "AI Agent"},
+    {"id": "budget", "name": "Budget Friendly"}
+  ],
+  "description": "💚 STARTER PACKAGE - Perfect for Small Teams\n\n✨ What's Included:\n• Single channel (Email only)\n• GPT-4o-mini AI agent\n• Basic knowledge base (RAG)\n• Auto-response (no human review)\n• Simple analytics\n• Cost tracking\n\n💰 Pricing (100 emails/day):\n• AI Cost: ~$5-10/day\n• Total: ~$10-15/day (~$300-450/month)\n\n🎯 Best For:\n✅ Startups (1-10 employees)\n✅ Simple FAQ handling\n✅ Budget-conscious teams\n✅ Testing AI support\n✅ Low volume (<200 emails/day)\n\n⚡ Expected Performance:\n• Response time: <60s\n• Automation rate: 50-60%\n• Cost per email: ~$0.05-0.10\n\n📋 Requirements:\n• OpenAI API key\n• Email inbox\n• Qdrant (free tier OK)\n• Google Sheets\n\n🚀 Quick Start: 15 minutes setup\n📚 Full docs: See STARTER_QUICKSTART.md"
+}
